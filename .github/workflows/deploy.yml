@@ -15,7 +15,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Setup Zig
-        uses: jetsung/setup-zig@v0.0.4
+        uses: jetsung/setup-zig@v1
       - name: Setup Cargo Lambda
         uses: zerj9/setup-cargo-lambda@v0.1.2
       - name: Setup Node

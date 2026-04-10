@@ -147,4 +147,113 @@ impl TryFrom<&str> for MoffLabels {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use octocrab::models::{
+        pulls::{Review, ReviewState},
+        webhook_events::{WebhookEvent, WebhookEventPayload, WebhookEventType},
+    };
+
+    use super::get_latest_reviews_by_user;
+
+    const PAYLOAD: &str = include_str!("../tests/test-payload.json");
+    const HEADERS: &str = include_str!("../tests/test-payload.headers.txt");
+
+    fn event_type_from_headers() -> &'static str {
+        HEADERS
+            .lines()
+            .find_map(|line| line.strip_prefix("X-Github-Event: "))
+            .expect("X-Github-Event header not found in test headers")
+    }
+
+    fn make_review(user_id: u64, state: &str, association: &str, submitted_at: &str) -> Review {
+        serde_json::from_value(serde_json::json!({
+            "id": 1,
+            "node_id": "n",
+            "html_url": "https://example.com",
+            "user": {
+                "login": "user",
+                "id": user_id,
+                "node_id": "n",
+                "avatar_url": "https://example.com",
+                "gravatar_id": "",
+                "url": "https://example.com",
+                "html_url": "https://example.com",
+                "followers_url": "https://example.com",
+                "following_url": "https://example.com",
+                "gists_url": "https://example.com",
+                "starred_url": "https://example.com",
+                "subscriptions_url": "https://example.com",
+                "organizations_url": "https://example.com",
+                "repos_url": "https://example.com",
+                "events_url": "https://example.com",
+                "received_events_url": "https://example.com",
+                "type": "User",
+                "site_admin": false
+            },
+            "state": state,
+            "submitted_at": submitted_at,
+            "author_association": association
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn parse_test_payload() {
+        let event = WebhookEvent::try_from_header_and_body(event_type_from_headers(), PAYLOAD)
+            .expect("test payload should parse successfully");
+        assert_eq!(event.kind, WebhookEventType::PullRequestReview);
+        let pr_number = match event.specific {
+            WebhookEventPayload::PullRequestReview(p) => p.pull_request.number,
+            _ => panic!("expected PullRequestReview payload"),
+        };
+        assert_eq!(pr_number, 1209);
+    }
+
+    #[test]
+    fn latest_review_wins_for_same_user() {
+        let reviews = vec![
+            make_review(1, "approved", "MEMBER", "2024-01-01T00:00:00Z"),
+            make_review(1, "changes_requested", "MEMBER", "2024-01-02T00:00:00Z"),
+        ];
+        let map = get_latest_reviews_by_user(reviews);
+        assert_eq!(map.len(), 1);
+        assert_eq!(
+            map.values().next().unwrap().0,
+            ReviewState::ChangesRequested
+        );
+    }
+
+    #[test]
+    fn non_member_reviews_are_excluded() {
+        let reviews = vec![make_review(
+            1,
+            "approved",
+            "CONTRIBUTOR",
+            "2024-01-01T00:00:00Z",
+        )];
+        let map = get_latest_reviews_by_user(reviews);
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn comment_reviews_are_excluded() {
+        let reviews = vec![make_review(
+            1,
+            "commented",
+            "MEMBER",
+            "2024-01-01T00:00:00Z",
+        )];
+        let map = get_latest_reviews_by_user(reviews);
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn multiple_users_tracked_independently() {
+        let reviews = vec![
+            make_review(1, "approved", "MEMBER", "2024-01-01T00:00:00Z"),
+            make_review(2, "changes_requested", "MEMBER", "2024-01-01T00:00:00Z"),
+        ];
+        let map = get_latest_reviews_by_user(reviews);
+        assert_eq!(map.len(), 2);
+    }
+}

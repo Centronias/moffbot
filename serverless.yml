@@ -1,0 +1,23 @@
+service: moffbot
+
+provider:
+  name: aws
+  runtime: provided.al2023
+  architecture: arm64
+  region: us-east-1
+  environment:
+    WEBHOOK_SECRET: ${ssm:/moffbot/webhook-secret}
+    GITHUB_TOKEN: ${ssm:/moffbot/github-token}
+
+package:
+  individually: true
+
+functions:
+  moffbot:
+    handler: bootstrap
+    package:
+      artifact: target/lambda/moffbot/bootstrap.zip
+    events:
+      - httpApi:
+          path: /webhook
+          method: post

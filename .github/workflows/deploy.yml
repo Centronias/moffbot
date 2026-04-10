@@ -10,17 +10,25 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: cargo-lambda/setup-cargo-lambda@v1
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Zig
+        uses: jetsung/setup-zig@v0.0.4
+      - name: Setup Cargo Lambda
+        uses: zerj9/setup-cargo-lambda@v0.1.2
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
       - run: npm ci
-      - run: cargo lambda build --release --arm64 --output-format zip
+      - name: Build and Package
+        run: cargo lambda build --release --arm64 --output-format zip
         env:
           RUSTC_WRAPPER: ""
-      - run: npx serverless deploy
+      - name: Deploy via Serverless
+        run: npx serverless deploy
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

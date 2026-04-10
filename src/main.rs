@@ -111,10 +111,7 @@ fn validate(event: WebhookEvent) -> Result<WebhookEvent> {
         .ok_or_else(|| anyhow!("Missing organization or repository in webhook"))?;
 
     // Check the source organization
-    let org_name = org
-        .name
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Missing organization name in webhook"))?;
+    let org_name = &org.login;
     if org_name != MOFF_ORG {
         bail!("Webhook from unexpected organization \"{org_name}\"");
     }
@@ -171,7 +168,7 @@ mod tests {
     use lambda_http::Body;
     use sha2::Sha256;
 
-    use super::{WEBHOOK_SECRET, verify_signature};
+    use super::{WEBHOOK_SECRET, validate, verify_signature};
 
     fn test_secret() -> &'static [u8] {
         WEBHOOK_SECRET.get_or_init(|| b"test-secret".to_vec())
@@ -237,5 +234,21 @@ mod tests {
             .body(Body::Empty)
             .unwrap();
         assert!(verify_signature(&req).is_err());
+    }
+
+    #[test]
+    fn validate_passes_for_test_payload() {
+        use octocrab::models::webhook_events::WebhookEvent;
+        const PAYLOAD: &str = include_str!("../tests/test-payload.json");
+        let event = WebhookEvent::try_from_header_and_body("pull_request_review", PAYLOAD).unwrap();
+        assert!(validate(event).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_wrong_org() {
+        use octocrab::models::webhook_events::WebhookEvent;
+        const PAYLOAD: &str = include_str!("../tests/test-payload-wrong-org.json");
+        let event = WebhookEvent::try_from_header_and_body("pull_request_review", PAYLOAD).unwrap();
+        assert!(validate(event).is_err());
     }
 }

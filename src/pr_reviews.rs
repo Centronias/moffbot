@@ -11,12 +11,14 @@ use octocrab::models::{
 use crate::{MOFF_ORG, MOFF_REPO, octo_ext::get_requested_reviewers};
 
 pub async fn on_pull_request_review(event: WebhookEvent) -> Result<()> {
-    let pr = (match event.specific {
+    let payload = match event.specific {
         WebhookEventPayload::PullRequestReview(payload) => *payload,
         _ => bail!("Unexpected webhook payload type"),
-    })
-    .pull_request
-    .number;
+    };
+    let pr = payload
+        .pull_request
+        .number
+        .ok_or_else(|| anyhow::anyhow!("PR number missing from webhook payload"))?;
 
     let octo = octocrab::instance();
 
@@ -206,7 +208,7 @@ mod tests {
             WebhookEventPayload::PullRequestReview(p) => p.pull_request.number,
             _ => panic!("expected PullRequestReview payload"),
         };
-        assert_eq!(pr_number, 1209);
+        assert_eq!(pr_number, Some(1209));
     }
 
     #[test]
